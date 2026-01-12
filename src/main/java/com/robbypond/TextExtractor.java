@@ -4,10 +4,13 @@ import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
-import org.apache.tika.detect.DefaultDetector;
+import org.apache.tika.config.TikaConfig;
 import org.apache.tika.detect.Detector;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.metadata.Metadata;
@@ -25,13 +28,17 @@ import org.xml.sax.SAXException;
 public class TextExtractor {
 
   private final Parser parser;
+  private final Detector detector;
   private final int writeLimit;
   private final Map<String, Function<Integer, ContentHandler>> customHandlers = new HashMap<>();
 
   /**
    * Creates a new TextExtractor with no write limit.
+   *
+   * @throws TikaException if Tika configuration fails
+   * @throws IOException   if Tika configuration file cannot be read
    */
-  public TextExtractor() {
+  public TextExtractor() throws TikaException, IOException, SAXException {
     this(-1);
   }
 
@@ -39,9 +46,13 @@ public class TextExtractor {
    * Creates a new TextExtractor with the specified write limit.
    *
    * @param writeLimit the maximum number of characters to extract, or -1 for no limit
+   * @throws TikaException if Tika configuration fails
+   * @throws IOException   if Tika configuration file cannot be read
    */
-  public TextExtractor(int writeLimit) {
-    this.parser = new AutoDetectParser();
+  public TextExtractor(int writeLimit) throws TikaException, IOException, SAXException {
+    TikaConfig config = new TikaConfig(TextExtractor.class.getResourceAsStream("/tika-config.xml"));
+    this.parser = new AutoDetectParser(config);
+    this.detector = config.getDetector();
     this.writeLimit = writeLimit;
   }
 
@@ -76,7 +87,6 @@ public class TextExtractor {
     ParseContext context = new ParseContext();
 
     // Detect mime type
-    Detector detector = new DefaultDetector();
     MediaType mediaType = detector.detect(streamToUse, metadata);
     String mimeType = mediaType.toString();
 
@@ -113,6 +123,22 @@ public class TextExtractor {
    */
   public String extractText(byte[] bytes) throws IOException, TikaException, SAXException {
     try (InputStream inputStream = new ByteArrayInputStream(bytes)) {
+      return extractText(inputStream);
+    }
+  }
+
+  /**
+   * Extracts text from a file path.
+   *
+   * @param filePath the path to the file
+   * @return the extracted text
+   * @throws IOException   if an I/O error occurs
+   * @throws TikaException if a Tika error occurs
+   * @throws SAXException  if a SAX error occurs
+   */
+  public String extractText(String filePath) throws IOException, TikaException, SAXException {
+    Path path = Paths.get(filePath);
+    try (InputStream inputStream = Files.newInputStream(path)) {
       return extractText(inputStream);
     }
   }
