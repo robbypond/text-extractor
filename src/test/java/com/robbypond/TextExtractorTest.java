@@ -1,6 +1,8 @@
 package com.robbypond;
 
+import org.apache.tika.sax.BodyContentHandler;
 import org.junit.jupiter.api.Test;
+import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
 
 import java.io.ByteArrayInputStream;
@@ -42,5 +44,28 @@ class TextExtractorTest {
         
         assertEquals(5, result.length());
         assertEquals("12345", result);
+    }
+
+    @Test
+    void testCustomHandler() throws Exception {
+        String content = "<html><body><p>Custom Handler Test</p></body></html>";
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+
+        TextExtractor extractor = new TextExtractor();
+        
+        // Register a custom handler for text/html that converts everything to uppercase
+        extractor.registerCustomHandler("text/html", (limit) -> new BodyContentHandler(limit) {
+            @Override
+            public void characters(char[] ch, int start, int length) throws SAXException {
+                for (int i = start; i < start + length; i++) {
+                    ch[i] = Character.toUpperCase(ch[i]);
+                }
+                super.characters(ch, start, length);
+            }
+        });
+
+        String result = extractor.extractText(inputStream);
+        
+        assertTrue(result.contains("CUSTOM HANDLER TEST"));
     }
 }

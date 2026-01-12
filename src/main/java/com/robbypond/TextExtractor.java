@@ -1,24 +1,33 @@
 package com.robbypond;
 
+import org.apache.tika.detect.DefaultDetector;
+import org.apache.tika.detect.Detector;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.metadata.Metadata;
+import org.apache.tika.mime.MediaType;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.sax.BodyContentHandler;
+import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
 
 public class TextExtractor {
 
     private final Parser parser;
     private final int writeLimit;
+    private final Map<String, Function<Integer, ContentHandler>> customHandlers = new HashMap<>();
 
     public TextExtractor() {
         this(-1);
@@ -29,10 +38,29 @@ public class TextExtractor {
         this.writeLimit = writeLimit;
     }
 
+    public void registerCustomHandler(String mimeType, Function<Integer, ContentHandler> handlerFactory) {
+        customHandlers.put(mimeType, handlerFactory);
+    }
+
     public String extractText(InputStream inputStream) throws IOException, TikaException, SAXException {
-        BodyContentHandler handler = new BodyContentHandler(writeLimit);
+        if (!inputStream.markSupported()) {
+            inputStream = new BufferedInputStream(inputStream);
+        }
+
         Metadata metadata = new Metadata();
         ParseContext context = new ParseContext();
+        
+        // Detect mime type
+        Detector detector = new DefaultDetector();
+        MediaType mediaType = detector.detect(inputStream, metadata);
+        String mimeType = mediaType.toString();
+
+        ContentHandler handler;
+        if (customHandlers.containsKey(mimeType)) {
+            handler = customHandlers.get(mimeType).apply(writeLimit);
+        } else {
+            handler = new BodyContentHandler(writeLimit);
+        }
 
         try {
             parser.parse(inputStream, handler, metadata, context);
